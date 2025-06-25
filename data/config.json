@@ -31,7 +31,13 @@
     }
   },
   "actuators": {},
-  "connection": {},
+  "connection": {
+    "controller_type": "Arduino Uno",
+    "port": "COM8 - USB Serial Device (COM8)",
+    "baudrate": 115200,
+    "timeout": 20.0,
+    "auto_connect": false
+  },
   "jog": {
     "step_sizes": [
       0.1,
@@ -62,5 +68,5 @@
     "console_max_lines": 500
   },
   "macros": {},
-  "last_modified": "2025-06-25T16:24:57.115953"
+  "last_modified": "2025-06-25T17:27:37.609147"
 }

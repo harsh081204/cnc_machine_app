@@ -69,6 +69,7 @@ class SerialManager(QObject):
     command_queued = Signal(str)                   # Command added to queue
     command_sent = Signal(str)                     # Command actually sent
     response_timeout = Signal(str)                 # Command timed out
+    coordinates_updated = Signal(dict)             # Emitted when new coordinates are parsed from a line
     
     def __init__(self, auto_reconnect: bool = True, command_timeout: float = 5.0):
         super().__init__()
@@ -337,7 +338,7 @@ class SerialManager(QObject):
     def _read_loop(self):
         """Main reading loop running in separate thread"""
         buffer = ""
-        
+        coord_regex = re.compile(r'X:([+-]?\d+\.?\d*)\s*Y:([+-]?\d+\.?\d*)\s*Z:([+-]?\d+\.?\d*)')
         while self.keep_running and self.serial_port and self.serial_port.is_open:
             try:
                 if self.serial_port.in_waiting:
@@ -357,6 +358,16 @@ class SerialManager(QObject):
                             # Emit raw data
                             self.raw_data_received.emit(line)
                             
+                            # Coordinate extraction (Marlin/GRBL style)
+                            match = coord_regex.search(line)
+                            if match:
+                                coords = {
+                                    'X': float(match.group(1)),
+                                    'Y': float(match.group(2)),
+                                    'Z': float(match.group(3)),
+                                }
+                                self.coordinates_updated.emit(coords)
+                            
                             # Parse and emit structured response
                             response = self._parse_response(line)
                             self.data_received.emit(response)
@@ -366,7 +377,7 @@ class SerialManager(QObject):
                 
                 else:
                     time.sleep(0.01)  # Small delay when no data available
-                    
+                
             except serial.SerialException as e:
                 self.error_occurred.emit(f"Serial read error: {e}")
                 if self.auto_reconnect:

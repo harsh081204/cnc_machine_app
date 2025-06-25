@@ -117,20 +117,70 @@ class JogPanel(QWidget):
         parent_layout.addLayout(section_layout)
     
     def create_movement_section(self, parent_layout):
-        """Create the movement controls section with speed slider adjacent to XY/Z controls"""
+        """Create the movement controls section with grid layout for jog buttons and adjacent speed slider"""
         movement_layout = QHBoxLayout()
-        movement_layout.setSpacing(32)  # More space between groups
+        movement_layout.setSpacing(32)
         movement_layout.setContentsMargins(0, 0, 0, 0)
 
-        # XY movement grid
-        xy_group = self.create_xy_controls()
-        movement_layout.addWidget(xy_group)
+        # Jog grid (X/Y/Z)
+        jog_grid = QGridLayout()
+        jog_grid.setSpacing(8)
 
-        # Z controls
-        z_group = self.create_z_controls()
-        movement_layout.addWidget(z_group)
+        # X/Y buttons in cross
+        self.btn_y_pos = QPushButton("↑")
+        self.btn_y_pos.setFixedSize(48, 48)
+        self.btn_y_pos.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.btn_y_pos.setToolTip("Jog +Y")
+        jog_grid.addWidget(self.btn_y_pos, 0, 1)
 
-        # Speed slider (vertical, right of movement controls)
+        self.btn_x_neg = QPushButton("←")
+        self.btn_x_neg.setFixedSize(48, 48)
+        self.btn_x_neg.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.btn_x_neg.setToolTip("Jog -X")
+        jog_grid.addWidget(self.btn_x_neg, 1, 0)
+
+        self.btn_xy_home = QPushButton("⌂")
+        self.btn_xy_home.setFixedSize(48, 48)
+        self.btn_xy_home.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.btn_xy_home.setToolTip("Move XY to home position")
+        jog_grid.addWidget(self.btn_xy_home, 1, 1)
+
+        self.btn_x_pos = QPushButton("→")
+        self.btn_x_pos.setFixedSize(48, 48)
+        self.btn_x_pos.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.btn_x_pos.setToolTip("Jog +X")
+        jog_grid.addWidget(self.btn_x_pos, 1, 2)
+
+        self.btn_y_neg = QPushButton("↓")
+        self.btn_y_neg.setFixedSize(48, 48)
+        self.btn_y_neg.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.btn_y_neg.setToolTip("Jog -Y")
+        jog_grid.addWidget(self.btn_y_neg, 2, 1)
+
+        # Z+ and Z- vertically to the right
+        z_layout = QVBoxLayout()
+        z_layout.setSpacing(8)
+        self.btn_z_pos = QPushButton("Z+")
+        self.btn_z_pos.setFixedSize(48, 40)
+        self.btn_z_pos.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        self.btn_z_pos.setToolTip("Jog +Z")
+        z_layout.addWidget(self.btn_z_pos)
+        self.btn_z_home = QPushButton("Z⌂")
+        self.btn_z_home.setFixedSize(48, 32)
+        self.btn_z_home.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        self.btn_z_home.setToolTip("Move Z to home position")
+        z_layout.addWidget(self.btn_z_home)
+        self.btn_z_neg = QPushButton("Z-")
+        self.btn_z_neg.setFixedSize(48, 40)
+        self.btn_z_neg.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        self.btn_z_neg.setToolTip("Jog -Z")
+        z_layout.addWidget(self.btn_z_neg)
+        jog_grid.addLayout(z_layout, 0, 3, 3, 1)
+
+        # Add jog grid to movement layout
+        movement_layout.addLayout(jog_grid)
+
+        # Speed slider (vertical, right of jog grid)
         speed_layout = QVBoxLayout()
         speed_layout.setSpacing(8)
         speed_layout.setContentsMargins(0, 0, 0, 0)
@@ -154,107 +204,6 @@ class JogPanel(QWidget):
         movement_layout.addLayout(speed_layout)
 
         parent_layout.addLayout(movement_layout)
-    
-    def create_xy_controls(self):
-        """Create XY movement controls"""
-        xy_frame = QFrame()
-        xy_frame.setStyleSheet("""
-            QFrame {
-                background-color: #232629;
-                border: 1px solid #444;
-                border-radius: 6px;
-                padding: 8px;
-            }
-        """)
-        xy_layout = QVBoxLayout(xy_frame)
-        xy_layout.setSpacing(8)
-        xy_layout.setContentsMargins(8, 8, 8, 8)
-        
-        # Label
-        xy_label = QLabel("XY Movement")
-        xy_label.setAlignment(Qt.AlignCenter)
-        xy_label.setFont(QFont("Segoe UI", 9, QFont.Bold))
-        xy_label.setStyleSheet("color: #f0f0f0; margin-bottom: 4px;")
-        xy_layout.addWidget(xy_label)
-        
-        # Grid layout for buttons
-        xy_grid = QGridLayout()
-        xy_grid.setSpacing(6)
-        
-        # Create movement buttons
-        self.btn_y_pos = QPushButton("↑")  # Y+
-        self.btn_y_neg = QPushButton("↓")  # Y-
-        self.btn_x_neg = QPushButton("←")  # X-
-        self.btn_x_pos = QPushButton("→")  # X+
-        self.btn_xy_home = QPushButton("⌂")  # XY Home
-        
-        # Set button properties
-        xy_buttons = [self.btn_y_pos, self.btn_y_neg, self.btn_x_neg, 
-                     self.btn_x_pos, self.btn_xy_home]
-        
-        for btn in xy_buttons:
-            btn.setFixedSize(48, 48)
-            btn.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        
-        # Special styling for home button
-        self.btn_xy_home.setToolTip("Move XY to home position")
-        
-        # Arrange buttons in grid
-        xy_grid.addWidget(self.btn_y_pos, 0, 1)
-        xy_grid.addWidget(self.btn_x_neg, 1, 0)
-        xy_grid.addWidget(self.btn_xy_home, 1, 1)
-        xy_grid.addWidget(self.btn_x_pos, 1, 2)
-        xy_grid.addWidget(self.btn_y_neg, 2, 1)
-        
-        xy_layout.addLayout(xy_grid)
-        return xy_frame
-    
-    def create_z_controls(self):
-        """Create Z movement controls"""
-        z_frame = QFrame()
-        z_frame.setStyleSheet("""
-            QFrame {
-                background-color: #232629;
-                border: 1px solid #444;
-                border-radius: 6px;
-                padding: 8px;
-            }
-        """)
-        z_layout = QVBoxLayout(z_frame)
-        z_layout.setSpacing(6)
-        z_layout.setContentsMargins(8, 8, 8, 8)
-        
-        # Label
-        z_label = QLabel("Z Movement")
-        z_label.setAlignment(Qt.AlignCenter)
-        z_label.setFont(QFont("Segoe UI", 9, QFont.Bold))
-        z_label.setStyleSheet("color: #f0f0f0; margin-bottom: 4px;")
-        z_layout.addWidget(z_label)
-        
-        # Z+ button
-        self.btn_z_pos = QPushButton("Z+")
-        self.btn_z_pos.setFixedSize(64, 52)
-        self.btn_z_pos.setFont(QFont("Segoe UI", 11, QFont.Bold))
-        self.btn_z_pos.setToolTip("Move Z axis up")
-        
-        # Z home button
-        self.btn_z_home = QPushButton("Z⌂")
-        self.btn_z_home.setFixedSize(64, 38)
-        self.btn_z_home.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        self.btn_z_home.setToolTip("Move Z to home position")
-        
-        # Z- button
-        self.btn_z_neg = QPushButton("Z-")
-        self.btn_z_neg.setFixedSize(64, 52)
-        self.btn_z_neg.setFont(QFont("Segoe UI", 11, QFont.Bold))
-        self.btn_z_neg.setToolTip("Move Z axis down")
-        
-        z_layout.addWidget(self.btn_z_pos)
-        z_layout.addWidget(self.btn_z_home)
-        z_layout.addWidget(self.btn_z_neg)
-        z_layout.addStretch()
-        
-        return z_frame
     
     def create_emergency_section(self, parent_layout):
         """Create emergency stop section"""

@@ -11,6 +11,7 @@ from ui.tab_config import ConfigTab
 from ui.tab_actuators import ActuatorsTab
 from ui.tab_connection import ConnectionTab
 from ui.tab_console import ConsoleTab
+from ui.tab_macros import MacroTab
 from core.config_manager import ConfigManager
 
 class MainWindow(QMainWindow):
@@ -55,11 +56,13 @@ class MainWindow(QMainWindow):
         self.actuators_tab = ActuatorsTab(config_manager=self.config_manager)
         self.connection_tab = ConnectionTab(config_manager=self.config_manager)
         self.console_tab = ConsoleTab()
+        self.macros_tab = MacroTab(self.connection_tab.serial_manager)
         
         self.tab_widget.addTab(self.config_tab, "Configuration")
         self.tab_widget.addTab(self.actuators_tab, "Actuators")
         self.tab_widget.addTab(self.connection_tab, "Connection")
         self.tab_widget.addTab(self.console_tab, "Console")
+        self.tab_widget.addTab(self.macros_tab, "Macros")
 
         right_layout.addWidget(self.tab_widget)
         splitter.addWidget(right_pane)
@@ -69,6 +72,12 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 3)
 
         main_layout.addWidget(splitter)
+
+        # Live coordinates display (compact)
+        self.coords_label = QLabel("X: 0.000  Y: 0.000  Z: 0.000")
+        self.coords_label.setAlignment(Qt.AlignRight)
+        self.coords_label.setStyleSheet("background-color: #222; color: #0fa; border: 1px solid #333; font: bold 10pt 'Consolas'; padding: 2px 8px; border-radius: 4px;")
+        main_layout.addWidget(self.coords_label)
 
     def setup_connections(self):
         """Setup signal connections between components"""
@@ -92,6 +101,10 @@ class MainWindow(QMainWindow):
         self.jog_panel.park_requested.connect(self.handle_park_request)
         self.jog_panel.start_requested.connect(self.handle_start_request)
         self.jog_panel.emergency_stop_requested.connect(self.handle_emergency_stop)
+        # Connect live coordinates
+        self.connection_tab.serial_manager.coordinates_updated.connect(self.update_coordinates_display)
+        # Macro execution feedback
+        self.macros_tab.macro_executed.connect(self.handle_macro_executed)
 
     def handle_actuator_command(self, command: str):
         """Handle actuator command from actuators tab"""
@@ -237,6 +250,14 @@ class MainWindow(QMainWindow):
     def get_firmware_info(self):
         """Get firmware information"""
         return self.connection_tab.get_firmware_info()
+
+    def update_coordinates_display(self, coords):
+        self.coords_label.setText(f"X: {coords.get('X', 0.0):.3f}  Y: {coords.get('Y', 0.0):.3f}  Z: {coords.get('Z', 0.0):.3f}")
+
+    def handle_macro_executed(self, gcode):
+        name = self.macros_tab.macro_name.text().strip()
+        self.log_panel.append_log(f"Macro Executed: <b>{name}</b>")
+        self.log_panel.append_log(f"<pre style='color:#0af;'>{gcode}</pre>")
 
     def closeEvent(self, event):
         # Save UI settings to config_manager

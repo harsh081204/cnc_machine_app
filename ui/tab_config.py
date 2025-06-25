@@ -1,7 +1,7 @@
 # ui/tab_config.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, 
-    QScrollArea, QGroupBox, QMessageBox, QProgressBar, QFrame
+    QScrollArea, QGroupBox, QMessageBox, QProgressBar, QFrame, QListWidget, QStackedWidget
 )
 from PySide6.QtCore import Signal, QTimer, Qt
 from PySide6.QtGui import QFont, QIcon
@@ -91,7 +91,7 @@ class ConfigTab(QWidget):
         return frame
     
     def create_axis_group(self):
-        """Create axis configuration group box"""
+        """Create axis configuration group with sidebar and stacked widget"""
         group = QGroupBox("Axis Parameters")
         group.setStyleSheet("""
             QGroupBox {
@@ -109,19 +109,31 @@ class ConfigTab(QWidget):
                 padding: 0 8px 0 8px;
             }
         """)
-        
-        layout = QVBoxLayout(group)
-        layout.setSpacing(15)
-        
-        # Create axis widgets with enhanced features
-        self.axis_x = AxisConfigWidget("X Axis", color="#FF6B6B")  # Red
-        self.axis_y = AxisConfigWidget("Y Axis", color="#4ECDC4")  # Teal  
-        self.axis_z = AxisConfigWidget("Z Axis", color="#45B7D1")  # Blue
-        
-        layout.addWidget(self.axis_x)
-        layout.addWidget(self.axis_y)
-        layout.addWidget(self.axis_z)
-        
+        layout = QHBoxLayout(group)
+        layout.setSpacing(16)
+
+        # Sidebar for axis selection
+        self.axis_list = QListWidget()
+        self.axis_list.setFixedWidth(100)
+        self.axis_list.addItem("X Axis")
+        self.axis_list.addItem("Y Axis")
+        self.axis_list.addItem("Z Axis")
+        layout.addWidget(self.axis_list)
+
+        # Stacked widget for per-axis settings
+        self.axis_stack = QStackedWidget()
+        self.axis_x = AxisConfigWidget("X Axis", color="#FF6B6B")
+        self.axis_y = AxisConfigWidget("Y Axis", color="#4ECDC4")
+        self.axis_z = AxisConfigWidget("Z Axis", color="#45B7D1")
+        self.axis_stack.addWidget(self.axis_x)
+        self.axis_stack.addWidget(self.axis_y)
+        self.axis_stack.addWidget(self.axis_z)
+        layout.addWidget(self.axis_stack)
+
+        # Connect sidebar to stacked widget
+        self.axis_list.currentRowChanged.connect(self.axis_stack.setCurrentIndex)
+        self.axis_list.setCurrentRow(0)
+
         return group
     
     def create_advanced_group(self):

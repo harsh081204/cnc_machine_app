@@ -652,10 +652,12 @@ class ConnectionTab(QWidget):
     def load_connection_config(self):
         config = self.config_manager.get_connection_config()
         self.controller_type.setCurrentText(config.controller_type)
-        self.port_selector.setCurrentText(config.port)
         self.baudrate_selector.setCurrentText(str(config.baudrate))
         self.timeout_spinbox.setValue(int(config.timeout))
         self.auto_reconnect.setChecked(config.auto_connect)
+        self.refresh_ports()
+        # Set the port after ports are loaded
+        QTimer.singleShot(100, lambda: self.port_selector.setCurrentText(config.port))
 
     def save_connection_config(self):
         config = ConnectionConfig(

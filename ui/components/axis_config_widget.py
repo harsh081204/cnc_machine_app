@@ -27,11 +27,11 @@ class AxisConfigWidget(QGroupBox):
     
     def init_ui(self):
         """Initialize the user interface"""
-        # Enhanced styling with color accent
+        # Unified border color for all axes
         self.setStyleSheet(f"""
             QGroupBox {{
                 font-weight: bold;
-                border: 2px solid {self.color};
+                border: 2px solid #2986cc;
                 border-radius: 8px;
                 margin-top: 12px;
                 padding-top: 15px;
@@ -41,7 +41,7 @@ class AxisConfigWidget(QGroupBox):
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 8px 0 8px;
-                color: {self.color};
+                color: #2986cc;
                 font-size: 12px;
             }}
         """)
@@ -100,7 +100,7 @@ class AxisConfigWidget(QGroupBox):
         input_field.setPlaceholderText(f"{min_val} - {max_val}")
         input_field.setStyleSheet(f"""
             QLineEdit {{
-                border: 2px solid #444;
+                border: 2px solid #2986cc;
                 border-radius: 4px;
                 padding: 6px 8px;
                 font-size: 11px;
