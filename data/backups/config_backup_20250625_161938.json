@@ -5,7 +5,7 @@
     "x": {
       "min": 0.0,
       "max": 200.0,
-      "acceleration": 25.0,
+      "acceleration": 2552.0,
       "feedrate": 1000.0,
       "jerk": 5.0,
       "homing_speed": 500.0,
@@ -62,5 +62,5 @@
     "console_max_lines": 500
   },
   "macros": {},
-  "last_modified": "2025-06-25T16:24:57.115953"
+  "last_modified": "2025-06-25T16:19:26.665843"
 }

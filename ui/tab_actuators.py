@@ -336,7 +336,7 @@ class ActuatorsTab(QWidget):
         return self.preview_widget
     
     def create_bottom_panel(self, parent_layout):
-        """Create the bottom control panel"""
+        """Create the bottom control panel (remove load/export buttons)"""
         bottom_frame = QFrame()
         bottom_frame.setFrameStyle(QFrame.StyledPanel)
         bottom_frame.setStyleSheet("""
@@ -355,7 +355,7 @@ class ActuatorsTab(QWidget):
         
         bottom_layout.addStretch()
         
-        # Save button
+        # Save button only
         self.btn_save = QPushButton("💾 Save")
         self.btn_save.setMinimumWidth(100)
         bottom_layout.addWidget(self.btn_save)
@@ -363,7 +363,7 @@ class ActuatorsTab(QWidget):
         parent_layout.addWidget(bottom_frame)
     
     def setup_connections(self):
-        """Setup signal connections"""
+        """Setup signal connections (remove load/export button connections)"""
         # List interactions
         self.actuator_list.itemClicked.connect(self.on_actuator_selected)
         self.actuator_list.itemDoubleClicked.connect(self.edit_actuator)

@@ -1,12 +1,13 @@
 # ui/jog_panel.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
-    QGridLayout, QSizePolicy, QComboBox, QFrame, QSpacerItem
+    QGridLayout, QSizePolicy, QComboBox, QFrame, QSpacerItem, QSlider, QLineEdit
 )
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtCore import Qt, Signal, QSize
 from enum import Enum
 from core.config_manager import JogConfig
+from PySide6.QtGui import QDoubleValidator
 
 
 class JogDirection(Enum):
@@ -23,7 +24,7 @@ class JogPanel(QWidget):
     """Enhanced Jog Control Panel with improved styling and functionality"""
     
     # Signals for communication with parent/controller
-    jog_requested = Signal(str, float)  # direction, distance
+    jog_requested = Signal(str, float, int)  # direction, distance, speed
     home_requested = Signal()
     park_requested = Signal()
     start_requested = Signal()
@@ -34,6 +35,7 @@ class JogPanel(QWidget):
         self.config_manager = config_manager
         self.jog_distances = [0.1, 0.5, 1.0, 5.0, 10.0]  # default
         self.current_jog_distance = 1.0
+        self.current_jog_speed = 1000  # mm/min default
         self.init_ui()
         self.setup_connections()
         self.apply_styles()
@@ -51,7 +53,7 @@ class JogPanel(QWidget):
         # Control buttons section
         self.create_control_section(main_layout)
         
-        # Jog distance selection
+        # Jog distance input section
         self.create_distance_section(main_layout)
         
         # Movement controls section
@@ -95,41 +97,62 @@ class JogPanel(QWidget):
         parent_layout.addLayout(control_layout)
     
     def create_distance_section(self, parent_layout):
-        """Create jog distance selection section"""
-        distance_layout = QHBoxLayout()
-        distance_layout.setContentsMargins(0, 0, 0, 0)
-        distance_layout.setSpacing(10)
-        
+        """Create jog distance input section (only distance, no speed slider here)"""
+        section_layout = QHBoxLayout()
+        section_layout.setContentsMargins(0, 0, 0, 0)
+        section_layout.setSpacing(10)
+
         distance_label = QLabel("Distance:")
         distance_label.setFont(QFont("Segoe UI", 9, QFont.Bold))
         distance_label.setStyleSheet("color: #f0f0f0;")
-        
-        self.distance_combo = QComboBox()
-        self.distance_combo.addItems([f"{d} mm" for d in self.jog_distances])
-        self.distance_combo.setCurrentText("1.0 mm")
-        self.distance_combo.setMinimumWidth(100)
-        self.distance_combo.setMaximumWidth(120)
-        
-        distance_layout.addWidget(distance_label)
-        distance_layout.addWidget(self.distance_combo)
-        distance_layout.addStretch()
-        
-        parent_layout.addLayout(distance_layout)
+        self.distance_edit = QLineEdit(str(self.current_jog_distance))
+        self.distance_edit.setFixedWidth(80)
+        self.distance_edit.setPlaceholderText("mm")
+        self.distance_edit.setValidator(QDoubleValidator(0.01, 1000.0, 3))
+        self.distance_edit.setToolTip("Enter jog distance in mm")
+
+        section_layout.addWidget(distance_label)
+        section_layout.addWidget(self.distance_edit)
+        section_layout.addStretch()
+        parent_layout.addLayout(section_layout)
     
     def create_movement_section(self, parent_layout):
-        """Create the movement controls section"""
+        """Create the movement controls section with speed slider adjacent to XY/Z controls"""
         movement_layout = QHBoxLayout()
-        movement_layout.setSpacing(16)
+        movement_layout.setSpacing(32)  # More space between groups
         movement_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # XY movement grid
         xy_group = self.create_xy_controls()
         movement_layout.addWidget(xy_group)
-        
+
         # Z controls
         z_group = self.create_z_controls()
         movement_layout.addWidget(z_group)
-        
+
+        # Speed slider (vertical, right of movement controls)
+        speed_layout = QVBoxLayout()
+        speed_layout.setSpacing(8)
+        speed_layout.setContentsMargins(0, 0, 0, 0)
+        speed_label = QLabel("Speed (%)")
+        speed_label.setFont(QFont("Segoe UI", 9, QFont.Bold))
+        speed_label.setStyleSheet("color: #f0f0f0;")
+        self.speed_slider = QSlider(Qt.Vertical)
+        self.speed_slider.setMinimum(0)
+        self.speed_slider.setMaximum(100)
+        self.speed_slider.setValue(self.speed_to_percent(self.current_jog_speed))
+        self.speed_slider.setTickInterval(10)
+        self.speed_slider.setSingleStep(1)
+        self.speed_slider.setFixedHeight(120)
+        self.speed_value_label = QLabel(self.get_speed_label(self.current_jog_speed))
+        self.speed_value_label.setFont(QFont("Segoe UI", 9))
+        self.speed_value_label.setStyleSheet("color: #f0f0f0;")
+        speed_layout.addWidget(speed_label, alignment=Qt.AlignHCenter)
+        speed_layout.addWidget(self.speed_slider, alignment=Qt.AlignHCenter)
+        speed_layout.addWidget(self.speed_value_label, alignment=Qt.AlignHCenter)
+        movement_layout.addSpacing(24)
+        movement_layout.addLayout(speed_layout)
+
         parent_layout.addLayout(movement_layout)
     
     def create_xy_controls(self):
@@ -267,30 +290,49 @@ class JogPanel(QWidget):
         self.btn_z_neg.clicked.connect(lambda: self.handle_jog(JogDirection.Z_NEGATIVE))
         
         # Home buttons
-        self.btn_xy_home.clicked.connect(lambda: self.jog_requested.emit("XY_HOME", 0))
-        self.btn_z_home.clicked.connect(lambda: self.jog_requested.emit("Z_HOME", 0))
+        self.btn_xy_home.clicked.connect(lambda: self.jog_requested.emit("XY_HOME", 0, 0))
+        self.btn_z_home.clicked.connect(lambda: self.jog_requested.emit("Z_HOME", 0, 0))
         
-        # Distance selection
-        self.distance_combo.currentTextChanged.connect(self.update_jog_distance)
+        # Distance input
+        self.distance_edit.editingFinished.connect(self.update_jog_distance)
+        # Speed slider
+        self.speed_slider.valueChanged.connect(self.update_jog_speed)
         
         # Emergency stop
         self.btn_emergency.clicked.connect(self.emergency_stop_requested.emit)
     
     def handle_jog(self, direction: JogDirection):
-        """Handle jog button clicks"""
-        self.jog_requested.emit(direction.value, self.current_jog_distance)
-    
-    def update_jog_distance(self, text: str):
-        """Update the current jog distance"""
+        # Validate distance
         try:
-            value = float(text.replace(" mm", ""))
+            distance = float(self.distance_edit.text())
+            if distance <= 0:
+                return
+        except ValueError:
+            return
+        self.jog_requested.emit(direction.value, distance, self.current_jog_speed)
+    
+    def update_jog_distance(self):
+        try:
+            value = float(self.distance_edit.text())
             self.current_jog_distance = value
-            # Save to config_manager
-            config = self.config_manager.get_jog_config()
-            config.step_sizes = self.jog_distances
-            self.config_manager.set_jog_config(config)
         except ValueError:
             pass
+    
+    def update_jog_speed(self, percent: int):
+        self.current_jog_speed = self.percent_to_speed(percent)
+        self.speed_value_label.setText(self.get_speed_label(self.current_jog_speed))
+    
+    def speed_to_percent(self, speed):
+        # Map speed (100-10000) to percent (0-100)
+        return int((speed - 100) / (10000 - 100) * 100)
+
+    def percent_to_speed(self, percent):
+        # Map percent (0-100) to speed (100-10000)
+        return int(100 + (percent / 100) * (10000 - 100))
+
+    def get_speed_label(self, speed):
+        percent = self.speed_to_percent(speed)
+        return f"{percent}% ({speed} mm/min)"
     
     def apply_styles(self):
         """Apply custom styles to the panel for dark mode consistency"""
@@ -436,7 +478,8 @@ class JogPanel(QWidget):
         for widget in self.findChildren(QPushButton):
             if widget != self.btn_emergency:  # Emergency stop should always be enabled
                 widget.setEnabled(enabled)
-        self.distance_combo.setEnabled(enabled)
+        self.distance_edit.setEnabled(enabled)
+        self.speed_slider.setEnabled(enabled)
     
     def get_current_jog_distance(self) -> float:
         """Get the current jog distance"""
@@ -446,7 +489,7 @@ class JogPanel(QWidget):
         config = self.config_manager.get_jog_config()
         if config.step_sizes:
             self.jog_distances = config.step_sizes
-            self.distance_combo.clear()
-            self.distance_combo.addItems([f"{d} mm" for d in self.jog_distances])
-            self.distance_combo.setCurrentText(f"{self.jog_distances[0]} mm")
+            self.distance_edit.setText(str(self.current_jog_distance))
             self.current_jog_distance = self.jog_distances[0]
+            self.speed_slider.setValue(self.speed_to_percent(self.current_jog_speed))
+            self.current_jog_speed = self.jog_distances[0]
