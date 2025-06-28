@@ -2,5 +2,17 @@
   {
     "name": "home",
     "gcode": "g28"
+  },
+  {
+    "name": "HOME1",
+    "gcode": "G28 Z;\nG92 Z0;\nG0 Z-25;\nG28 X Y;\nG92 X100 Y100 Z0;\nG1 X0 Y0;"
+  },
+  {
+    "name": "H",
+    "gcode": "G28 Z;\nG92 Z0;\nG0 Z-25;\nG28 X Y;\nG92 X100 Y100 Z0;\nG1 X0 Y0;"
+  },
+  {
+    "name": "program",
+    "gcode": "G28 Z;\nG92 Z0;\nG0 Z-27;\nG28 X Y;\nG92 X100 Y100 Z0;\nG4 P1;\nM106 P2 S255;\nG0 X0 Y0;\nG4 P1;\nM106 P2 S0;\nG28 X Y;\nG92 X100 Y100 Z0;"
   }
 ]

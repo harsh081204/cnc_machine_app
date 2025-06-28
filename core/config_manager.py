@@ -47,6 +47,7 @@ class JogConfig:
     step_sizes: List[float] = None
     park_position: Dict[str, float] = None
     home_position: Dict[str, float] = None
+    home_commands: Dict[str, str] = None  # Custom G-code for home commands
     
     def __post_init__(self):
         if self.step_sizes is None:
@@ -55,6 +56,16 @@ class JogConfig:
             self.park_position = {"x": 0.0, "y": 0.0, "z": 10.0}
         if self.home_position is None:
             self.home_position = {"x": 0.0, "y": 0.0, "z": 0.0}
+        if self.home_commands is None:
+            self.home_commands = {
+                "all": "G28",
+                "x": "G28 X",
+                "y": "G28 Y", 
+                "z": "G28 Z",
+                "xy": "G28 X Y",
+                "xz": "G28 X Z",
+                "yz": "G28 Y Z"
+            }
 
 @dataclass
 class UIConfig:

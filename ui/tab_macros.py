@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QLineEdit, QTextEdit, QPushButton, QLabel, QMessageBox
+    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QLineEdit, QTextEdit, QPushButton, QLabel, QMessageBox, QFileDialog
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
@@ -37,9 +37,12 @@ class MacroTab(QWidget):
         self.delete_macro_btn.clicked.connect(self.delete_macro)
         self.play_macro_btn = QPushButton(QIcon.fromTheme("media-playback-start"), "Play")
         self.play_macro_btn.clicked.connect(self.play_macro)
+        self.load_gcode_btn = QPushButton(QIcon.fromTheme("document-open"), "Load G-Code")
+        self.load_gcode_btn.clicked.connect(self.load_gcode_file)
         btn_row.addWidget(self.save_macro_btn)
         btn_row.addWidget(self.delete_macro_btn)
         btn_row.addWidget(self.play_macro_btn)
+        btn_row.addWidget(self.load_gcode_btn)
         editor_layout.addWidget(self.macro_name)
         editor_layout.addWidget(self.macro_editor)
         editor_layout.addLayout(btn_row)
@@ -114,4 +117,44 @@ class MacroTab(QWidget):
             line = line.strip()
             if line:
                 self.serial_manager.send_command(line)
-        self.macro_executed.emit(gcode) 
+        self.macro_executed.emit(gcode)
+
+    def load_gcode_file(self):
+        """Load a G-code file from the file system"""
+        # Get the user's desktop path
+        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+        
+        # Open file dialog starting from desktop
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load G-Code File",
+            desktop_path,
+            "G-Code Files (*.gcode *.nc *.g *.txt);;All Files (*.*)"
+        )
+        
+        if file_path:
+            try:
+                # Read the G-code file
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    gcode_content = f.read()
+                
+                # Extract filename without extension for macro name
+                filename = os.path.splitext(os.path.basename(file_path))[0]
+                
+                # Set the macro name and content
+                self.macro_name.setText(filename)
+                self.macro_editor.setText(gcode_content)
+                
+                # Show success message
+                QMessageBox.information(
+                    self, 
+                    "G-Code Loaded", 
+                    f"Successfully loaded G-code from:\n{os.path.basename(file_path)}\n\nLines loaded: {len(gcode_content.splitlines())}"
+                )
+                
+            except Exception as e:
+                QMessageBox.critical(
+                    self, 
+                    "Load Error", 
+                    f"Could not load G-code file:\n{str(e)}"
+                ) 

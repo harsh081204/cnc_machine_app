@@ -13,6 +13,7 @@ from ui.tab_connection import ConnectionTab
 from ui.tab_console import ConsoleTab
 from ui.tab_macros import MacroTab
 from core.config_manager import ConfigManager
+from core.limit_validator import LimitValidator
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -20,6 +21,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("INVARIANCE AUTOMATION - CNC Controller")
         self.setMinimumSize(1200, 700)
         self.config_manager = ConfigManager()
+        self.limit_validator = LimitValidator(self.config_manager)
         self.init_ui()
         self.setup_connections()
         # Apply UI settings from config_manager
@@ -98,6 +100,7 @@ class MainWindow(QMainWindow):
         # Connect jog panel signals
         self.jog_panel.jog_requested.connect(self.handle_jog_request)
         self.jog_panel.home_requested.connect(self.handle_home_request)
+        self.jog_panel.custom_home_requested.connect(self.handle_custom_home_request)
         self.jog_panel.park_requested.connect(self.handle_park_request)
         self.jog_panel.start_requested.connect(self.handle_start_request)
         self.jog_panel.emergency_stop_requested.connect(self.handle_emergency_stop)
@@ -140,11 +143,30 @@ class MainWindow(QMainWindow):
         # Update console tab with connection status
         if hasattr(self.console_tab, 'set_connection_status'):
             self.console_tab.set_connection_status(connected)
+        
+        # Reset position tracking when connecting
+        if connected:
+            self.limit_validator.reset_position()
 
     def handle_console_command(self, command: str):
-        """Handle console command from console tab"""
+        """Handle console command from console tab with limit validation"""
         self.log_panel.append_log(f"Console Command: {command}")
-        # Send command to CNC controller via connection tab
+        
+        # Validate command against limits
+        validation_result = self.limit_validator.validate_command(command)
+        
+        if not validation_result.is_valid:
+            # Command violates limits - show error and don't send
+            error_msg = f"❌ LIMIT VIOLATION: {validation_result.error_message}"
+            self.log_panel.append_log(error_msg)
+            self.log_panel.append_log("Command blocked to prevent damage to machine")
+            
+            # Also show error in console tab
+            if hasattr(self.console_tab, 'log_message'):
+                self.console_tab.log_message(error_msg)
+            return
+        
+        # Command is valid - send to controller
         if self.connection_tab.get_connection_status():
             success = self.connection_tab.send_command(command)
             if not success:
@@ -153,18 +175,29 @@ class MainWindow(QMainWindow):
             self.log_panel.append_log("Cannot send console command - not connected")
 
     def handle_jog_request(self, direction: str, distance: float):
-        """Handle jog movement request"""
+        """Handle jog movement request with limit validation"""
         self.log_panel.append_log(f"Jog: {direction} {distance}mm")
-        # Send jog command to CNC controller via connection tab
-        if self.connection_tab.get_connection_status():
-            # Convert jog request to appropriate G-code command
-            command = self.convert_jog_to_gcode(direction, distance)
-            if command:
+        
+        # Convert jog request to appropriate G-code command
+        command = self.convert_jog_to_gcode(direction, distance)
+        if command:
+            # Validate the jog command against limits
+            validation_result = self.limit_validator.validate_command(command)
+            
+            if not validation_result.is_valid:
+                # Jog command violates limits - show error and don't send
+                error_msg = f"❌ JOG LIMIT VIOLATION: {validation_result.error_message}"
+                self.log_panel.append_log(error_msg)
+                self.log_panel.append_log("Jog movement blocked to prevent damage to machine")
+                return
+            
+            # Command is valid - send to controller
+            if self.connection_tab.get_connection_status():
                 success = self.connection_tab.send_command(command)
                 if not success:
                     self.log_panel.append_log("Failed to send jog command")
-        else:
-            self.log_panel.append_log("Cannot send jog command - not connected")
+            else:
+                self.log_panel.append_log("Cannot send jog command - not connected")
 
     def handle_home_request(self):
         """Handle home request"""
@@ -180,6 +213,28 @@ class MainWindow(QMainWindow):
                 self.log_panel.append_log("Failed to send home command")
         else:
             self.log_panel.append_log("Cannot send home command - not connected")
+
+    def handle_custom_home_request(self, gcode: str):
+        """Handle custom home request with user-defined G-code"""
+        self.log_panel.append_log(f"Custom Home request: {gcode}")
+        
+        # Validate the custom G-code against limits
+        validation_result = self.limit_validator.validate_command(gcode)
+        
+        if not validation_result.is_valid:
+            # Custom home command violates limits - show error and don't send
+            error_msg = f"❌ CUSTOM HOME LIMIT VIOLATION: {validation_result.error_message}"
+            self.log_panel.append_log(error_msg)
+            self.log_panel.append_log("Custom home command blocked to prevent damage to machine")
+            return
+        
+        # Send custom home command to CNC controller via connection tab
+        if self.connection_tab.get_connection_status():
+            success = self.connection_tab.send_command(gcode)
+            if not success:
+                self.log_panel.append_log("Failed to send custom home command")
+        else:
+            self.log_panel.append_log("Cannot send custom home command - not connected")
 
     def handle_park_request(self):
         """Handle park request"""
@@ -252,12 +307,31 @@ class MainWindow(QMainWindow):
         return self.connection_tab.get_firmware_info()
 
     def update_coordinates_display(self, coords):
+        """Update coordinates display and limit validator position tracking"""
         self.coords_label.setText(f"X: {coords.get('X', 0.0):.3f}  Y: {coords.get('Y', 0.0):.3f}  Z: {coords.get('Z', 0.0):.3f}")
+        
+        # Update limit validator with current position
+        self.limit_validator.set_current_position(coords)
 
     def handle_macro_executed(self, gcode):
+        """Handle macro execution with limit validation"""
         name = self.macros_tab.macro_name.text().strip()
         self.log_panel.append_log(f"Macro Executed: <b>{name}</b>")
         self.log_panel.append_log(f"<pre style='color:#0af;'>{gcode}</pre>")
+        
+        # Validate macro G-code against limits
+        validation_results = self.limit_validator.validate_multiple_commands(gcode)
+        
+        # Check if any command violates limits
+        for i, result in enumerate(validation_results):
+            if not result.is_valid:
+                error_msg = f"❌ MACRO LIMIT VIOLATION (Line {i+1}): {result.error_message}"
+                self.log_panel.append_log(error_msg)
+                self.log_panel.append_log("Macro execution blocked to prevent damage to machine")
+                return
+        
+        # All commands are valid - macro can proceed
+        self.log_panel.append_log("✅ Macro validation passed - all commands within limits")
 
     def closeEvent(self, event):
         # Save UI settings to config_manager

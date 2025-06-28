@@ -112,6 +112,11 @@ class SerialManager(QObject):
             'marlin_temp': re.compile(r'T:(\d+\.?\d*)\s*/(\d+\.?\d*)'),
             'marlin_pos': re.compile(r'X:([+-]?\d+\.?\d*)\s*Y:([+-]?\d+\.?\d*)\s*Z:([+-]?\d+\.?\d*)'),
             'error': re.compile(r'(error|Error|ERROR|ALARM)[:|\s]*(.*)'),
+            'endstop_status': re.compile(r'([A-Z_]+):\s*(TRIGGERED|OPEN|HIGH|LOW)', re.IGNORECASE),
+            'firmware_version': re.compile(r'(FIRMWARE_NAME|FIRMWARE_URL|EXTRUDER_COUNT|UUID):\s*(.+)', re.IGNORECASE),
+            'marlin_endstop': re.compile(r'([A-Z_]+):\s*(TRIGGERED|OPEN)', re.IGNORECASE),
+            'grbl_endstop': re.compile(r'([A-Z_]+):\s*(TRIGGERED|OPEN)', re.IGNORECASE),
+            'temperature': re.compile(r'T:(\d+\.?\d*)\s*/(\d+\.?\d*)\s*B:(\d+\.?\d*)\s*/(\d+\.?\d*)', re.IGNORECASE),
         }
         
         # Statistics and monitoring
@@ -459,8 +464,75 @@ class SerialManager(QObject):
         elif any(fw in raw_lower for fw in ['grbl', 'marlin', 'repetier', 'smoothie', 'klipper']):
             response.response_type = 'firmware'
             response.parsed_data = {'firmware_info': raw_data}
+        elif self._is_endstop_response(raw_data):
+            response.response_type = 'endstop_status'
+            response.parsed_data = self._parse_endstop_status(raw_data)
+        elif self._is_firmware_info_response(raw_data):
+            response.response_type = 'firmware_info'
+            response.parsed_data = self._parse_firmware_info(raw_data)
+        elif self._is_temperature_response(raw_data):
+            response.response_type = 'temperature'
+            response.parsed_data = self._parse_temperature(raw_data)
         
         return response
+    
+    def _is_endstop_response(self, data: str) -> bool:
+        """Check if response is an endstop status response"""
+        # Look for patterns like "X_MIN: TRIGGERED", "Y_MIN: OPEN", etc.
+        return bool(self.response_parsers['endstop_status'].search(data))
+    
+    def _is_firmware_info_response(self, data: str) -> bool:
+        """Check if response is firmware information"""
+        return bool(self.response_parsers['firmware_version'].search(data))
+    
+    def _is_temperature_response(self, data: str) -> bool:
+        """Check if response is temperature data"""
+        return bool(self.response_parsers['temperature'].search(data))
+    
+    def _parse_endstop_status(self, data: str) -> dict:
+        """Parse endstop status response"""
+        endstops = {}
+        
+        # Find all endstop status matches
+        matches = self.response_parsers['endstop_status'].findall(data)
+        for match in matches:
+            endstop_name = match[0].upper()
+            status = match[1].upper()
+            endstops[endstop_name] = status
+        
+        return {
+            'endstops': endstops,
+            'raw_data': data
+        }
+    
+    def _parse_firmware_info(self, data: str) -> dict:
+        """Parse firmware information response"""
+        info = {}
+        
+        # Find all firmware info matches
+        matches = self.response_parsers['firmware_version'].findall(data)
+        for match in matches:
+            key = match[0].upper()
+            value = match[1].strip()
+            info[key] = value
+        
+        return {
+            'firmware_info': info,
+            'raw_data': data
+        }
+    
+    def _parse_temperature(self, data: str) -> dict:
+        """Parse temperature response"""
+        temp_match = self.response_parsers['temperature'].search(data)
+        if temp_match:
+            return {
+                'extruder_current': float(temp_match.group(1)),
+                'extruder_target': float(temp_match.group(2)),
+                'bed_current': float(temp_match.group(3)),
+                'bed_target': float(temp_match.group(4)),
+                'raw_data': data
+            }
+        return {'raw_data': data}
     
     def _handle_response(self, response: SerialResponse):
         """Handle response for pending commands"""
@@ -479,6 +551,10 @@ class SerialManager(QObject):
     
     def _detect_firmware(self):
         """Attempt to detect connected firmware type"""
+        # Reset firmware detection state
+        self.connection_info.firmware = FirmwareType.UNKNOWN
+        self.firmware_info = {'type': 'Unknown', 'raw_response': ''}
+        
         detection_commands = ["M115", "$I", "version", "STATUS"]
         
         for cmd in detection_commands:
@@ -489,7 +565,37 @@ class SerialManager(QObject):
         """Handle firmware detection response"""
         raw_lower = response.raw_data.lower()
         
-        if 'grbl' in raw_lower:
+        # Check for firmware info patterns first (M115 responses)
+        if 'firmware_name:' in raw_lower:
+            # Parse firmware name from M115 response
+            if 'marlin' in raw_lower:
+                self.connection_info.firmware = FirmwareType.MARLIN
+                self.firmware_info = {'type': 'Marlin', 'version': response.raw_data}
+            elif 'grbl' in raw_lower:
+                self.connection_info.firmware = FirmwareType.GRBL
+                self.firmware_info = {'type': 'GRBL', 'version': response.raw_data}
+            elif 'repetier' in raw_lower:
+                self.connection_info.firmware = FirmwareType.REPETIER
+                self.firmware_info = {'type': 'Repetier', 'version': response.raw_data}
+            elif 'smoothie' in raw_lower:
+                self.connection_info.firmware = FirmwareType.SMOOTHIEWARE
+                self.firmware_info = {'type': 'Smoothieware', 'version': response.raw_data}
+            elif 'klipper' in raw_lower:
+                self.connection_info.firmware = FirmwareType.KLIPPER
+                self.firmware_info = {'type': 'Klipper', 'version': response.raw_data}
+            else:
+                # Extract firmware name from response
+                import re
+                firmware_match = re.search(r'firmware_name:\s*([^,\s]+)', raw_lower)
+                if firmware_match:
+                    firmware_name = firmware_match.group(1).title()
+                    self.connection_info.firmware = FirmwareType.CUSTOM
+                    self.firmware_info = {'type': firmware_name, 'version': response.raw_data}
+                else:
+                    self.connection_info.firmware = FirmwareType.UNKNOWN
+                    self.firmware_info = {'type': 'Unknown', 'raw_response': response.raw_data}
+        # Check for direct firmware mentions
+        elif 'grbl' in raw_lower:
             self.connection_info.firmware = FirmwareType.GRBL
             self.firmware_info = {'type': 'GRBL', 'version': response.raw_data}
         elif 'marlin' in raw_lower:
@@ -505,8 +611,14 @@ class SerialManager(QObject):
             self.connection_info.firmware = FirmwareType.KLIPPER
             self.firmware_info = {'type': 'Klipper', 'version': response.raw_data}
         else:
-            self.connection_info.firmware = FirmwareType.UNKNOWN
-            self.firmware_info = {'type': 'Unknown', 'raw_response': response.raw_data}
+            # Check if it's a valid response but unknown firmware
+            if response.response_type in ['ok', 'firmware_info']:
+                # Only set to unknown if we haven't detected anything yet
+                if self.connection_info.firmware == FirmwareType.UNKNOWN:
+                    self.firmware_info = {'type': 'Unknown', 'raw_response': response.raw_data}
+            else:
+                # Not a firmware detection response, ignore
+                return
         
         self.firmware_detected.emit(self.connection_info.firmware, self.firmware_info)
     
@@ -561,3 +673,9 @@ class SerialManager(QObject):
         """Clean shutdown of serial manager"""
         self.monitor_timer.stop()
         self.disconnect()
+
+    def reset_firmware_detection(self):
+        """Reset firmware detection state"""
+        self.connection_info.firmware = FirmwareType.UNKNOWN
+        self.firmware_info = {'type': 'Unknown', 'raw_response': ''}
+        self.firmware_detected.emit(self.connection_info.firmware, self.firmware_info)

@@ -26,6 +26,7 @@ class JogPanel(QWidget):
     # Signals for communication with parent/controller
     jog_requested = Signal(str, float, int)  # direction, distance, speed
     home_requested = Signal()
+    custom_home_requested = Signal(str)  # custom G-code for home
     park_requested = Signal()
     start_requested = Signal()
     emergency_stop_requested = Signal()
@@ -86,6 +87,9 @@ class JogPanel(QWidget):
         self.btn_home = QPushButton("⌂ Home")
         self.btn_park = QPushButton("⏹ Park")
         
+        # Make home button dynamic with tooltip
+        self.btn_home.setToolTip("Click to home with custom G-code\nRight-click to use default G28")
+        
         control_buttons = [self.btn_start, self.btn_home, self.btn_park]
         
         for btn in control_buttons:
@@ -97,11 +101,12 @@ class JogPanel(QWidget):
         parent_layout.addLayout(control_layout)
     
     def create_distance_section(self, parent_layout):
-        """Create jog distance input section (only distance, no speed slider here)"""
+        """Create jog distance and home value input section"""
         section_layout = QHBoxLayout()
         section_layout.setContentsMargins(0, 0, 0, 0)
-        section_layout.setSpacing(10)
+        section_layout.setSpacing(15)
 
+        # Distance input
         distance_label = QLabel("Distance:")
         distance_label.setFont(QFont("Segoe UI", 9, QFont.Bold))
         distance_label.setStyleSheet("color: #f0f0f0;")
@@ -111,8 +116,19 @@ class JogPanel(QWidget):
         self.distance_edit.setValidator(QDoubleValidator(0.01, 1000.0, 3))
         self.distance_edit.setToolTip("Enter jog distance in mm")
 
+        # Home value input
+        home_label = QLabel("Home Value:")
+        home_label.setFont(QFont("Segoe UI", 9, QFont.Bold))
+        home_label.setStyleSheet("color: #f0f0f0;")
+        self.home_value_edit = QLineEdit("G28")
+        self.home_value_edit.setFixedWidth(120)
+        self.home_value_edit.setPlaceholderText("G-code")
+        self.home_value_edit.setToolTip("Enter custom G-code for home command (e.g., G28, G28 X Y Z)")
+
         section_layout.addWidget(distance_label)
         section_layout.addWidget(self.distance_edit)
+        section_layout.addWidget(home_label)
+        section_layout.addWidget(self.home_value_edit)
         section_layout.addStretch()
         parent_layout.addLayout(section_layout)
     
@@ -225,12 +241,7 @@ class JogPanel(QWidget):
     
     def setup_connections(self):
         """Setup signal connections"""
-        # Control buttons
-        self.btn_start.clicked.connect(self.start_requested.emit)
-        self.btn_home.clicked.connect(self.home_requested.emit)
-        self.btn_park.clicked.connect(self.park_requested.emit)
-        
-        # Movement buttons
+        # Jog buttons
         self.btn_x_pos.clicked.connect(lambda: self.handle_jog(JogDirection.X_POSITIVE))
         self.btn_x_neg.clicked.connect(lambda: self.handle_jog(JogDirection.X_NEGATIVE))
         self.btn_y_pos.clicked.connect(lambda: self.handle_jog(JogDirection.Y_POSITIVE))
@@ -239,16 +250,23 @@ class JogPanel(QWidget):
         self.btn_z_neg.clicked.connect(lambda: self.handle_jog(JogDirection.Z_NEGATIVE))
         
         # Home buttons
-        self.btn_xy_home.clicked.connect(lambda: self.jog_requested.emit("XY_HOME", 0, 0))
-        self.btn_z_home.clicked.connect(lambda: self.jog_requested.emit("Z_HOME", 0, 0))
+        self.btn_home.clicked.connect(self.handle_custom_home)
+        self.btn_home.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.btn_home.customContextMenuRequested.connect(self.handle_default_home)
+        self.btn_xy_home.clicked.connect(self.handle_xy_home)
+        self.btn_z_home.clicked.connect(self.handle_z_home)
         
-        # Distance input
-        self.distance_edit.editingFinished.connect(self.update_jog_distance)
-        # Speed slider
+        # Control buttons
+        self.btn_start.clicked.connect(self.start_requested.emit)
+        self.btn_park.clicked.connect(self.park_requested.emit)
+        self.btn_emergency.clicked.connect(self.emergency_stop_requested.emit)
+        
+        # Input changes
+        self.distance_edit.textChanged.connect(self.update_jog_distance)
         self.speed_slider.valueChanged.connect(self.update_jog_speed)
         
-        # Emergency stop
-        self.btn_emergency.clicked.connect(self.emergency_stop_requested.emit)
+        # Save home value to config when changed
+        self.home_value_edit.textChanged.connect(self.save_home_value_to_config)
     
     def handle_jog(self, direction: JogDirection):
         # Validate distance
@@ -258,7 +276,45 @@ class JogPanel(QWidget):
                 return
         except ValueError:
             return
-        self.jog_requested.emit(direction.value, distance, self.current_jog_speed)
+        
+        # Get current speed
+        speed = self.percent_to_speed(self.speed_slider.value())
+        
+        # Emit jog signal
+        self.jog_requested.emit(direction.value, distance, speed)
+
+    def handle_custom_home(self):
+        """Handle custom home command with user-defined G-code"""
+        home_gcode = self.home_value_edit.text().strip()
+        if home_gcode:
+            self.custom_home_requested.emit(home_gcode)
+        else:
+            # Fallback to default if empty
+            self.home_requested.emit()
+
+    def handle_default_home(self, position):
+        """Handle default home command (right-click)"""
+        self.home_requested.emit()
+
+    def handle_xy_home(self):
+        """Handle XY home command"""
+        xy_home_gcode = self.home_value_edit.text().strip()
+        if xy_home_gcode and "X" in xy_home_gcode and "Y" in xy_home_gcode:
+            # Use custom XY home if it contains X and Y
+            self.custom_home_requested.emit(xy_home_gcode)
+        else:
+            # Use default XY home
+            self.custom_home_requested.emit("G28 X Y")
+
+    def handle_z_home(self):
+        """Handle Z home command"""
+        z_home_gcode = self.home_value_edit.text().strip()
+        if z_home_gcode and "Z" in z_home_gcode:
+            # Use custom Z home if it contains Z
+            self.custom_home_requested.emit(z_home_gcode)
+        else:
+            # Use default Z home
+            self.custom_home_requested.emit("G28 Z")
     
     def update_jog_distance(self):
         try:
@@ -435,10 +491,31 @@ class JogPanel(QWidget):
         return self.current_jog_distance
     
     def load_jog_config(self):
-        config = self.config_manager.get_jog_config()
-        if config.step_sizes:
-            self.jog_distances = config.step_sizes
-            self.distance_edit.setText(str(self.current_jog_distance))
-            self.current_jog_distance = self.jog_distances[0]
-            self.speed_slider.setValue(self.speed_to_percent(self.current_jog_speed))
-            self.current_jog_speed = self.jog_distances[0]
+        """Load jog configuration from config manager"""
+        try:
+            jog_config = self.config_manager.get_jog_config()
+            
+            # Load step sizes
+            if jog_config.step_sizes:
+                self.jog_distances = jog_config.step_sizes
+            
+            # Load home commands
+            if jog_config.home_commands and 'all' in jog_config.home_commands:
+                default_home = jog_config.home_commands['all']
+                self.home_value_edit.setText(default_home)
+            
+        except Exception as e:
+            print(f"Failed to load jog config: {e}")
+            # Use defaults
+            self.home_value_edit.setText("G28")
+
+    def save_home_value_to_config(self):
+        """Save the current home value to jog config for persistence"""
+        try:
+            jog_config = self.config_manager.get_jog_config()
+            if not jog_config.home_commands:
+                jog_config.home_commands = {}
+            jog_config.home_commands['all'] = self.home_value_edit.text().strip()
+            self.config_manager.set_jog_config(jog_config)
+        except Exception as e:
+            print(f"Failed to save home value to config: {e}")
